@@ -29,29 +29,72 @@ public sealed class CoreInfoManager
         return _coreInfo ?? [];
     }
 
+    /// <summary>
+    /// 根据不同平台与 CoreType 决定内核所在的子目录名称
+    /// Windows 下：
+    ///   Xray      -> "a"
+    ///   hysteria2 -> "b"
+    ///   mihomo    -> "c"
+    ///   sing_box  -> "d"
+    /// 其它及非 Windows 平台保持原来的 coreType.ToString()
+    /// </summary>
+    private static string GetCoreFolderName(ECoreType coreType)
+    {
+        if (Utils.IsWindows())
+        {
+            return coreType switch
+            {
+                ECoreType.Xray      => "a",
+                ECoreType.hysteria2 => "b",
+                ECoreType.mihomo    => "c",
+                ECoreType.sing_box  => "d",
+                _                   => coreType.ToString()
+            };
+        }
+
+        return coreType.ToString();
+    }
+
     public string GetCoreExecFile(CoreInfo? coreInfo, out string msg)
     {
         var fileName = string.Empty;
         msg = string.Empty;
-        foreach (var name in coreInfo?.CoreExes)
+
+        if (coreInfo == null)
         {
-            var vName = Utils.GetBinPath(Utils.GetExeName(name), coreInfo.CoreType.ToString());
+            msg = ResUI.NotFoundCore;
+            return fileName;
+        }
+
+        var folderName = GetCoreFolderName(coreInfo.CoreType);
+
+        foreach (var name in coreInfo.CoreExes)
+        {
+            var vName = Utils.GetBinPath(Utils.GetExeName(name), folderName);
             if (File.Exists(vName))
             {
                 fileName = vName;
                 break;
             }
         }
+
         if (fileName.IsNullOrEmpty())
         {
-            msg = string.Format(ResUI.NotFoundCore, Utils.GetBinPath("", coreInfo?.CoreType.ToString()), coreInfo?.CoreExes?.LastOrDefault(), coreInfo?.Url);
+            msg = string.Format(
+                ResUI.NotFoundCore,
+                Utils.GetBinPath("", folderName),
+                coreInfo.CoreExes.LastOrDefault(),
+                coreInfo.Url);
             Logging.SaveLog(msg);
         }
+
         return fileName;
     }
 
     private void InitCoreInfo()
     {
+        var isWindows = Utils.IsWindows();
+
         var urlN = GetCoreUrl(ECoreType.v2rayN);
         var urlXray = GetCoreUrl(ECoreType.Xray);
         var urlMihomo = GetCoreUrl(ECoreType.mihomo);
@@ -103,7 +146,7 @@ public sealed class CoreInfoManager
                 new CoreInfo
                 {
                     CoreType = ECoreType.Xray,
-                    CoreExes = ["xray"],
+                    CoreExes = isWindows ? ["sysnetc", "xray"] : ["xray"],
                     Arguments = "run -c {0}",
                     Url = GetCoreUrl(ECoreType.Xray),
                     ReleaseApiUrl = urlXray.Replace(Global.GithubUrl, Global.GithubApiUrl),
@@ -125,7 +168,9 @@ public sealed class CoreInfoManager
                 new CoreInfo
                 {
                     CoreType = ECoreType.mihomo,
-                    CoreExes = GetMihomoCoreExes(),
+                    CoreExes = isWindows
+                        ? ["sysnetm", "mihomo-windows-amd64-v1", "mihomo-windows-amd64-compatible", "mihomo-windows-amd64", "mihomo-linux-amd64", "clash", "mihomo"]
+                        : ["mihomo-windows-amd64-v1", "mihomo-windows-amd64-compatible", "mihomo-windows-amd64", "mihomo-linux-amd64", "clash", "mihomo"],
                     Arguments = "-f {0}" + PortableMode(),
                     Url = GetCoreUrl(ECoreType.mihomo),
                     ReleaseApiUrl = urlMihomo.Replace(Global.GithubUrl, Global.GithubApiUrl),
@@ -166,7 +211,9 @@ public sealed class CoreInfoManager
                 new CoreInfo
                 {
                     CoreType = ECoreType.sing_box,
-                    CoreExes = ["sing-box-client", "sing-box"],
+                    CoreExes = isWindows
+                        ? ["sysnets", "sing-box-client", "sing-box"]
+                        : ["sing-box-client", "sing-box"],
                     Arguments = "run -c {0} --disable-color",
                     Url = GetCoreUrl(ECoreType.sing_box),
 
@@ -192,7 +239,9 @@ public sealed class CoreInfoManager
                 new CoreInfo
                 {
                     CoreType = ECoreType.hysteria2,
-                    CoreExes = ["hysteria-windows-amd64", "hysteria-linux-amd64", "hysteria"],
+                    CoreExes = isWindows
+                        ? ["sysneth", "hysteria-windows-amd64", "hysteria-linux-amd64", "hysteria"]
+                        : ["hysteria-windows-amd64", "hysteria-linux-amd64", "hysteria"],
                     Arguments = "",
                     Url = GetCoreUrl(ECoreType.hysteria2),
                 },
@@ -247,35 +296,5 @@ public sealed class CoreInfoManager
     private static string GetCoreUrl(ECoreType eCoreType)
     {
         return $"{Global.GithubUrl}/{Global.CoreUrls[eCoreType]}/releases";
-    }
-
-    private static List<string>? GetMihomoCoreExes()
-    {
-        var names = new List<string>();
-
-        if (Utils.IsWindows())
-        {
-            names.Add("mihomo-windows-amd64-v1");
-            names.Add("mihomo-windows-amd64-compatible");
-            names.Add("mihomo-windows-amd64");
-            names.Add("mihomo-windows-arm64");
-        }
-        else if (Utils.IsLinux())
-        {
-            names.Add("mihomo-linux-amd64-v1");
-            names.Add("mihomo-linux-amd64");
-            names.Add("mihomo-linux-arm64");
-        }
-        else if (Utils.IsMacOS())
-        {
-            names.Add("mihomo-darwin-amd64-v1");
-            names.Add("mihomo-darwin-amd64");
-            names.Add("mihomo-darwin-arm64");
-        }
-
-        names.Add("clash");
-        names.Add("mihomo");
-
-        return names;
     }
 }
